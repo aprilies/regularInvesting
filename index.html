@@ -293,6 +293,7 @@ footer {
 const CONFIG = {
   presets: ['SPY', 'QQQ', 'VOO', 'VTI', 'DIA', 'IVV'],
   proxies: [
+    url => '/api/proxy?url=' + encodeURIComponent(url),
     url => 'http://localhost:8787/?url=' + encodeURIComponent(url),
     url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
     url => 'https://corsproxy.io/?' + encodeURIComponent(url),
