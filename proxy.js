@@ -1,4 +1,4 @@
-// Local CORS proxy server for 定投决策助手
+// Local CORS proxy server for 买入决策助手
 // Run: node proxy.js
 // Then open index.html in browser
 const http = require('http');

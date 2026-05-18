@@ -182,7 +182,7 @@ footer {
 
 <header>
   <h1>买入决策助手</h1>
-  <p>基于 200 日均线、RSI、VIX 恐慌指数、回撤幅度综合判断定投时机</p>
+  <p>基于 200 日均线、RSI、VIX 恐慌指数、回撤幅度综合判断买入时机</p>
 </header>
 
 <!-- Settings -->
@@ -268,7 +268,7 @@ footer {
 
   <div class="composite" id="compositeScore">
     <div class="score-number" id="scoreNumber">--</div>
-    <div class="score-label">综合定投评分</div>
+    <div class="score-label">综合买入评分</div>
     <div class="score-gauge"><div class="score-gauge-fill" id="scoreGauge"></div></div>
     <div class="recommendation" id="recommendation"></div>
     <div class="summary" id="summary"></div>
@@ -560,8 +560,8 @@ const ScoringEngine = {
   },
 
   recommend(score) {
-    if (score >= 70) return { text: '适合定投', color: 'var(--green)', bg: 'rgba(34,197,94,0.15)' };
-    if (score >= 40) return { text: '可以定投', color: 'var(--yellow)', bg: 'rgba(234,179,8,0.15)' };
+    if (score >= 70) return { text: '适合买入', color: 'var(--green)', bg: 'rgba(34,197,94,0.15)' };
+    if (score >= 40) return { text: '可以买入', color: 'var(--yellow)', bg: 'rgba(234,179,8,0.15)' };
     return { text: '建议观望', color: 'var(--red)', bg: 'rgba(239,68,68,0.15)' };
   },
 };
@@ -853,7 +853,7 @@ const App = {
       score: r.rsi.score,
       status: r.rsi.ready ? (r.rsi.value < 30 ? '超卖' : r.rsi.value > 70 ? '超买' : '中性') : '数据不足',
       explanation: r.rsi.ready
-        ? r.rsi.value < 30 ? 'RSI 处于超卖区域，近期卖压较大，可能是较好的定投时机'
+        ? r.rsi.value < 30 ? 'RSI 处于超卖区域，近期卖压较大，可能是较好的买入时机'
           : r.rsi.value > 70 ? 'RSI 处于超买区域，短期涨幅较大，建议观望'
           : 'RSI 处于中性区域，无明显信号'
         : '历史数据不足，无法计算 RSI',
@@ -869,7 +869,7 @@ const App = {
         ? r.vix.value > 25 ? '恐慌' : r.vix.value > 20 ? '偏高' : '平稳'
         : '数据暂不可用',
       explanation: r.vix.value != null
-        ? r.vix.value > 25 ? `VIX 为 ${r.vix.value.toFixed(1)}，市场恐慌情绪较高，历史上恐慌时期定投往往有较好回报`
+        ? r.vix.value > 25 ? `VIX 为 ${r.vix.value.toFixed(1)}，市场恐慌情绪较高，历史上恐慌时期买入往往有较好回报`
           : r.vix.value > 20 ? `VIX 为 ${r.vix.value.toFixed(1)}，市场情绪偏谨慎`
           : `VIX 为 ${r.vix.value.toFixed(1)}，市场情绪平稳，无明显恐慌信号`
         : '无法获取 VIX 数据',
@@ -883,7 +883,7 @@ const App = {
       score: r.drawdown.score,
       status: r.drawdown.value > 20 ? '大幅回调' : r.drawdown.value > 10 ? '明显回调' : r.drawdown.value > 3 ? '小幅回调' : '接近高点',
       explanation: r.drawdown.value > 10
-        ? `距离52周高点 $${r.drawdown.high.toFixed(2)} 回撤 ${r.drawdown.value.toFixed(1)}%，定投成本相对较低`
+        ? `距离52周高点 $${r.drawdown.high.toFixed(2)} 回撤 ${r.drawdown.value.toFixed(1)}%，买入成本相对较低`
         : `距离52周高点 $${r.drawdown.high.toFixed(2)} 仅回撤 ${r.drawdown.value.toFixed(1)}%，当前价格偏高`,
     });
 
@@ -900,11 +900,11 @@ const App = {
     // Summary
     let summary = `综合评分 ${r.composite}/100，`;
     if (r.composite >= 70) {
-      summary += '多项指标显示当前市场处于较为有利的定投窗口，建议按计划执行定投。';
+      summary += '多项指标显示当前市场处于较为有利的买入窗口，建议按计划执行买入。';
     } else if (r.composite >= 40) {
-      summary += '市场信号中性，可以按计划定投但建议适当关注市场变化。';
+      summary += '市场信号中性，可以按计划买入但建议适当关注市场变化。';
     } else {
-      summary += '市场整体偏贵或情绪过于乐观，建议观望或减少定投金额。';
+      summary += '市场整体偏贵或情绪过于乐观，建议观望或减少买入金额。';
     }
     document.getElementById('summary').textContent = summary;
   },

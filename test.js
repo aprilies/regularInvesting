@@ -1,5 +1,5 @@
 // ============================================================
-// Unit Tests for 定投决策助手
+// Unit Tests for 买入决策助手
 // Run with: node test.js
 // ============================================================
 const assert = require('assert');
@@ -108,8 +108,8 @@ const ScoringEngine = {
   },
 
   recommend(score) {
-    if (score >= 70) return { text: '适合定投', color: 'var(--green)', bg: 'rgba(34,197,94,0.15)' };
-    if (score >= 40) return { text: '可以定投', color: 'var(--yellow)', bg: 'rgba(234,179,8,0.15)' };
+    if (score >= 70) return { text: '适合买入', color: 'var(--green)', bg: 'rgba(34,197,94,0.15)' };
+    if (score >= 40) return { text: '可以买入', color: 'var(--yellow)', bg: 'rgba(234,179,8,0.15)' };
     return { text: '建议观望', color: 'var(--red)', bg: 'rgba(239,68,68,0.15)' };
   },
 };
@@ -374,12 +374,12 @@ test('composite: all null returns 50 (default)', () => {
   );
 });
 
-test('recommend: score 80 => 适合定投', () => {
-  assert.strictEqual(ScoringEngine.recommend(80).text, '适合定投');
+test('recommend: score 80 => 适合买入', () => {
+  assert.strictEqual(ScoringEngine.recommend(80).text, '适合买入');
 });
 
-test('recommend: score 50 => 可以定投', () => {
-  assert.strictEqual(ScoringEngine.recommend(50).text, '可以定投');
+test('recommend: score 50 => 可以买入', () => {
+  assert.strictEqual(ScoringEngine.recommend(50).text, '可以买入');
 });
 
 test('recommend: score 20 => 建议观望', () => {
@@ -387,12 +387,12 @@ test('recommend: score 20 => 建议观望', () => {
 });
 
 test('recommend: boundary at 70', () => {
-  assert.strictEqual(ScoringEngine.recommend(70).text, '适合定投');
-  assert.strictEqual(ScoringEngine.recommend(69).text, '可以定投');
+  assert.strictEqual(ScoringEngine.recommend(70).text, '适合买入');
+  assert.strictEqual(ScoringEngine.recommend(69).text, '可以买入');
 });
 
 test('recommend: boundary at 40', () => {
-  assert.strictEqual(ScoringEngine.recommend(40).text, '可以定投');
+  assert.strictEqual(ScoringEngine.recommend(40).text, '可以买入');
   assert.strictEqual(ScoringEngine.recommend(39).text, '建议观望');
 });
 
