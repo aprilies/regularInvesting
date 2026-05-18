@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>定投决策助手</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/date-fns@3"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+<style>
+:root {
+  --bg: #0f1117;
+  --card: #1a1d2e;
+  --card-hover: #222640;
+  --border: #2a2e42;
+  --text: #e1e4ed;
+  --text-dim: #8b8fa3;
+  --accent: #6c63ff;
+  --green: #22c55e;
+  --yellow: #eab308;
+  --red: #ef4444;
+  --blue: #3b82f6;
+  --orange: #f59e0b;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+.container { max-width: 960px; margin: 0 auto; padding: 1rem; }
+
+/* Header */
+header { text-align: center; padding: 2rem 0 1rem; }
+header h1 { font-size: 1.8rem; font-weight: 700; letter-spacing: 0.02em; }
+header p { color: var(--text-dim); margin-top: 0.3rem; font-size: 0.95rem; }
+
+/* Settings */
+.settings-toggle {
+  display: flex; justify-content: flex-end; margin-bottom: 0.5rem;
+}
+.settings-toggle button {
+  background: none; border: 1px solid var(--border); color: var(--text-dim);
+  padding: 0.3rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
+}
+.settings-toggle button:hover { border-color: var(--accent); color: var(--text); }
+.settings-panel {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1rem; margin-bottom: 1rem; display: none;
+}
+.settings-panel.open { display: block; }
+.settings-row { display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.settings-row label { color: var(--text-dim); font-size: 0.85rem; min-width: 80px; }
+.settings-row input {
+  background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  padding: 0.4rem 0.6rem; border-radius: 6px; font-size: 0.85rem; flex: 1; min-width: 200px;
+}
+.settings-note { color: var(--text-dim); font-size: 0.75rem; margin-top: 0.3rem; }
+
+/* Ticker Input */
+.ticker-section { margin-bottom: 1.5rem; }
+.presets { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.8rem; }
+.preset-btn {
+  background: var(--card); border: 1px solid var(--border); color: var(--text);
+  padding: 0.4rem 1rem; border-radius: 20px; cursor: pointer; font-size: 0.9rem;
+  transition: all 0.15s;
+}
+.preset-btn:hover, .preset-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.custom-input { display: flex; gap: 0.5rem; }
+.custom-input input {
+  background: var(--card); border: 1px solid var(--border); color: var(--text);
+  padding: 0.5rem 0.8rem; border-radius: 8px; font-size: 0.95rem; flex: 1;
+  text-transform: uppercase;
+}
+.custom-input input::placeholder { color: var(--text-dim); text-transform: none; }
+.analyze-btn {
+  background: var(--accent); border: none; color: #fff;
+  padding: 0.5rem 1.5rem; border-radius: 8px; cursor: pointer; font-size: 0.95rem;
+  font-weight: 600; transition: opacity 0.15s;
+}
+.analyze-btn:hover { opacity: 0.85; }
+.analyze-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Loading */
+.loading { text-align: center; padding: 2rem; display: none; }
+.loading.show { display: block; }
+.spinner {
+  width: 36px; height: 36px; border: 3px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin 0.8s linear infinite; margin: 0 auto 0.8rem;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading p { color: var(--text-dim); }
+
+/* Error */
+.error-msg {
+  background: #2a1520; border: 1px solid #5a2030; color: #f87171;
+  padding: 0.8rem 1rem; border-radius: 8px; margin-bottom: 1rem;
+  display: none; font-size: 0.9rem;
+}
+.error-msg.show { display: flex; align-items: center; gap: 0.5rem; }
+
+/* Dashboard */
+.dashboard { display: none; }
+.dashboard.show { display: block; }
+
+.price-summary {
+  text-align: center; padding: 1.2rem; background: var(--card);
+  border: 1px solid var(--border); border-radius: 10px; margin-bottom: 1rem;
+}
+.price-summary .ticker-name { font-size: 1.3rem; font-weight: 700; }
+.price-summary .price { font-size: 2rem; font-weight: 700; margin: 0.3rem 0; }
+.price-summary .date { color: var(--text-dim); font-size: 0.85rem; }
+
+/* Indicator Cards */
+.indicators-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.8rem; margin-bottom: 1rem;
+}
+.indicator-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1rem; transition: border-color 0.15s;
+}
+.indicator-card:hover { border-color: var(--accent); }
+.indicator-card .label { color: var(--text-dim); font-size: 0.8rem; margin-bottom: 0.3rem; }
+.indicator-card .value { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.2rem; }
+.indicator-card .status { font-size: 0.85rem; margin-bottom: 0.5rem; }
+.indicator-card .explanation { color: var(--text-dim); font-size: 0.78rem; line-height: 1.5; }
+.score-bar {
+  height: 4px; background: var(--border); border-radius: 2px; margin-top: 0.5rem; overflow: hidden;
+}
+.score-bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+
+/* Composite Score */
+.composite {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1.5rem; text-align: center; margin-bottom: 1rem;
+}
+.composite .score-number { font-size: 3.5rem; font-weight: 800; line-height: 1; }
+.composite .score-label { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 0.8rem; }
+.composite .recommendation {
+  display: inline-block; padding: 0.4rem 1.2rem; border-radius: 20px;
+  font-size: 1.1rem; font-weight: 700; margin-bottom: 0.8rem;
+}
+.composite .summary { color: var(--text-dim); font-size: 0.9rem; max-width: 600px; margin: 0 auto; line-height: 1.6; }
+.score-gauge {
+  height: 8px; background: var(--border); border-radius: 4px;
+  max-width: 300px; margin: 0.8rem auto; overflow: hidden;
+}
+.score-gauge-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+
+/* Chart */
+.chart-container {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1rem; margin-bottom: 1rem;
+}
+.chart-container canvas { max-height: 350px; }
+
+/* Footer */
+footer {
+  text-align: center; padding: 1.5rem 0; color: var(--text-dim); font-size: 0.75rem;
+  border-top: 1px solid var(--border); margin-top: 1rem;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .container { padding: 0.6rem; }
+  header h1 { font-size: 1.4rem; }
+  .price-summary .price { font-size: 1.5rem; }
+  .composite .score-number { font-size: 2.5rem; }
+  .indicators-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 400px) {
+  .indicators-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>定投决策助手</h1>
+  <p>基于 200 日均线、RSI、VIX 恐慌指数、回撤幅度综合判断定投时机</p>
+</header>
+
+<!-- Settings -->
+<div class="settings-toggle">
+  <button onclick="App.toggleSettings()">设置</button>
+</div>
+<div class="settings-panel" id="settingsPanel">
+  <div class="settings-row">
+    <label>Alpha Vantage Key:</label>
+    <input type="text" id="apiKeyInput" placeholder="输入 API Key（可选，免费申请）">
+  </div>
+  <div class="settings-row">
+    <label>数据源:</label>
+    <select id="dataSourceSelect" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:0.4rem;border-radius:6px;">
+      <option value="yahoo">Yahoo Finance（推荐，需本地代理）</option>
+      <option value="stooq">Stooq（需 API Key + 本地代理）</option>
+      <option value="alphavantage">Alpha Vantage（需要 Key）</option>
+    </select>
+  </div>
+  <p class="settings-note">Yahoo Finance 数据全面，需先运行 <code style="background:var(--bg);padding:0.1rem 0.3rem;border-radius:3px;">node proxy.js</code> 启动本地代理。Alpha Vantage 免费 Key 每天 25 次请求。
+    <a href="https://www.alphavantage.co/support/#api-key" target="_blank" style="color:var(--accent);">申请 Key</a></p>
+  <div style="margin-top:0.5rem;">
+    <button onclick="App.saveSettings()" style="background:var(--accent);border:none;color:#fff;padding:0.35rem 1rem;border-radius:6px;cursor:pointer;font-size:0.85rem;">保存设置</button>
+  </div>
+</div>
+
+<!-- Ticker Input -->
+<div class="ticker-section">
+  <div class="presets" id="presets"></div>
+  <div class="custom-input">
+    <input type="text" id="tickerInput" placeholder="输入股票代码，如 AAPL、BABA" onkeydown="if(event.key==='Enter')App.analyze()">
+    <button class="analyze-btn" id="analyzeBtn" onclick="App.analyze()">分析</button>
+  </div>
+</div>
+
+<!-- Loading -->
+<div class="loading" id="loading">
+  <div class="spinner"></div>
+  <p>正在获取数据...</p>
+</div>
+
+<!-- Error -->
+<div class="error-msg" id="errorMsg"></div>
+
+<!-- Dashboard -->
+<div class="dashboard" id="dashboard">
+  <div class="price-summary" id="priceSummary">
+    <div class="ticker-name" id="tickerName"></div>
+    <div class="price" id="currentPrice"></div>
+    <div class="date" id="dataDate"></div>
+  </div>
+
+  <div class="indicators-grid">
+    <div class="indicator-card" id="cardMa200">
+      <div class="label">200 日均线偏离</div>
+      <div class="value" id="ma200Value">--</div>
+      <div class="status" id="ma200Status"></div>
+      <div class="explanation" id="ma200Explain"></div>
+      <div class="score-bar"><div class="score-bar-fill" id="ma200Bar"></div></div>
+    </div>
+    <div class="indicator-card" id="cardRsi">
+      <div class="label">RSI(14)</div>
+      <div class="value" id="rsiValue">--</div>
+      <div class="status" id="rsiStatus"></div>
+      <div class="explanation" id="rsiExplain"></div>
+      <div class="score-bar"><div class="score-bar-fill" id="rsiBar"></div></div>
+    </div>
+    <div class="indicator-card" id="cardVix">
+      <div class="label">VIX 恐慌指数</div>
+      <div class="value" id="vixValue">--</div>
+      <div class="status" id="vixStatus"></div>
+      <div class="explanation" id="vixExplain"></div>
+      <div class="score-bar"><div class="score-bar-fill" id="vixBar"></div></div>
+    </div>
+    <div class="indicator-card" id="cardDrawdown">
+      <div class="label">52 周回撤幅度</div>
+      <div class="value" id="drawdownValue">--</div>
+      <div class="status" id="drawdownStatus"></div>
+      <div class="explanation" id="drawdownExplain"></div>
+      <div class="score-bar"><div class="score-bar-fill" id="drawdownBar"></div></div>
+    </div>
+  </div>
+
+  <div class="composite" id="compositeScore">
+    <div class="score-number" id="scoreNumber">--</div>
+    <div class="score-label">综合定投评分</div>
+    <div class="score-gauge"><div class="score-gauge-fill" id="scoreGauge"></div></div>
+    <div class="recommendation" id="recommendation"></div>
+    <div class="summary" id="summary"></div>
+  </div>
+
+  <div class="chart-container">
+    <canvas id="priceChart"></canvas>
+  </div>
+</div>
+
+<footer>
+  <p>仅供参考，不构成投资建议。数据来源：Stooq / Alpha Vantage。VIX 作为市场恐慌情绪的替代指标。</p>
+  <p style="margin-top:0.3rem;">数据缓存于本地浏览器，每日自动刷新。</p>
+</footer>
+
+</div>
+
+<script>
+// ============================================================
+// Module A: Constants & Configuration
+// ============================================================
+const CONFIG = {
+  presets: ['SPY', 'QQQ', 'VOO', 'VTI', 'DIA', 'IVV'],
+  proxies: [
+    url => 'http://localhost:8787/?url=' + encodeURIComponent(url),
+    url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+    url => 'https://corsproxy.io/?' + encodeURIComponent(url),
+  ],
+  stooqUrl: (ticker, start, end) =>
+    `https://stooq.com/q/d/l/?s=${ticker.toLowerCase()}.us&d1=${start}&d2=${end}&i=d`,
+  avBaseUrl: 'https://www.alphavantage.co/query',
+  cacheTTL: 86400000, // 24h
+  weights: { ma200: 0.30, rsi: 0.25, vix: 0.25, drawdown: 0.20 },
+};
+
+// ============================================================
+// Module B: Data Layer
+// ============================================================
+const DataService = {
+  async fetchWithProxy(url) {
+    for (const proxyFn of CONFIG.proxies) {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 12000);
+        const resp = await fetch(proxyFn(url), { signal: controller.signal });
+        clearTimeout(timer);
+        if (resp.ok) {
+          const text = await resp.text();
+          if (text && text.trim().length > 10) return text;
+        }
+      } catch (e) {
+        console.warn('Proxy failed:', e.message);
+      }
+    }
+    throw new Error('所有数据代理均不可用。请先运行 node proxy.js 启动本地代理，或在设置中切换到 Alpha Vantage 数据源');
+  },
+
+  parseCSV(text) {
+    const lines = text.trim().split('\n').filter(l => l.trim());
+    if (lines.length < 2) return [];
+    const header = lines[0].toLowerCase();
+    if (!header.includes('date') || !header.includes('close')) return [];
+    return lines.slice(1).map(line => {
+      const cols = line.split(',');
+      return {
+        date: cols[0],
+        open: parseFloat(cols[1]),
+        high: parseFloat(cols[2]),
+        low: parseFloat(cols[3]),
+        close: parseFloat(cols[4]),
+        volume: parseInt(cols[5]) || 0,
+      };
+    }).filter(d => !isNaN(d.close)).sort((a, b) => a.date.localeCompare(b.date));
+  },
+
+  async fetchStooq(ticker) {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 400); // ~1.5 years for 200MA + buffer
+    const fmt = d => d.toISOString().slice(0, 10).replace(/-/g, '');
+    const url = CONFIG.stooqUrl(ticker, fmt(start), fmt(end));
+    const text = await this.fetchWithProxy(url);
+    if (text.includes('No data') || text.includes('Error')) {
+      throw new Error(`无法获取 ${ticker} 的数据，请检查代码是否正确`);
+    }
+    return this.parseCSV(text);
+  },
+
+  async fetchStooqVIX() {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 60);
+    const fmt = d => d.toISOString().slice(0, 10).replace(/-/g, '');
+    // Try ^VIX first, fall back to VIXY
+    for (const sym of ['%5Evix', 'vixy']) {
+      try {
+        const url = `https://stooq.com/q/d/l/?s=${sym}.us&d1=${fmt(start)}&d2=${fmt(end)}&i=d`;
+        const text = await this.fetchWithProxy(url);
+        const data = this.parseCSV(text);
+        if (data.length > 0) return data;
+      } catch (e) { /* try next */ }
+    }
+    return null;
+  },
+
+  async fetchYahoo(ticker) {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=2y&interval=1d`;
+    const text = await this.fetchWithProxy(url);
+    const json = JSON.parse(text);
+    const result = json.chart && json.chart.result && json.chart.result[0];
+    if (!result || !result.timestamp) throw new Error(`无法获取 ${ticker} 的数据，请检查代码是否正确`);
+    const ts = result.timestamp;
+    const quotes = result.indicators.quote[0];
+    return ts.map((t, i) => {
+      const d = new Date(t * 1000);
+      const dateStr = d.toISOString().slice(0, 10);
+      return {
+        date: dateStr,
+        open: quotes.open[i] || 0,
+        high: quotes.high[i] || 0,
+        low: quotes.low[i] || 0,
+        close: quotes.close[i] || 0,
+        volume: quotes.volume[i] || 0,
+      };
+    }).filter(d => d.close > 0).sort((a, b) => a.date.localeCompare(b.date));
+  },
+
+  async fetchYahooVIX() {
+    try {
+      const url = 'https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?range=3mo&interval=1d';
+      const text = await this.fetchWithProxy(url);
+      const json = JSON.parse(text);
+      const result = json.chart && json.chart.result && json.chart.result[0];
+      if (!result || !result.timestamp) return null;
+      const ts = result.timestamp;
+      const closes = result.indicators.quote[0].close;
+      return ts.map((t, i) => {
+        const d = new Date(t * 1000);
+        return { date: d.toISOString().slice(0, 10), close: closes[i] || 0 };
+      }).filter(d => d.close > 0).sort((a, b) => a.date.localeCompare(b.date));
+    } catch (e) {
+      console.warn('Yahoo VIX fetch failed:', e.message);
+      return null;
+    }
+  },
+
+  async fetchAlphaVantage(apiKey, ticker) {
+    const url = `${CONFIG.avBaseUrl}?function=TIME_SERIES_DAILY&symbol=${ticker}&outputsize=full&apikey=${apiKey}`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (data['Error Message']) throw new Error(data['Error Message']);
+    if (data['Note']) throw new Error('API 请求频率超限，请稍后重试');
+    const ts = data['Time Series (Daily)'];
+    if (!ts) throw new Error('无法获取数据');
+    return Object.entries(ts).map(([date, v]) => ({
+      date,
+      open: parseFloat(v['1. open']),
+      high: parseFloat(v['2. high']),
+      low: parseFloat(v['3. low']),
+      close: parseFloat(v['4. close']),
+      volume: parseInt(v['5. volume']) || 0,
+    })).sort((a, b) => a.date.localeCompare(b.date));
+  },
+
+  async fetchAVVIX(apiKey) {
+    return this.fetchAlphaVantage(apiKey, 'VIX');
+  },
+
+  // Cache
+  getCache(key) {
+    try {
+      const raw = localStorage.getItem('dca_' + key);
+      if (!raw) return null;
+      const { timestamp, data } = JSON.parse(raw);
+      if (Date.now() - timestamp > CONFIG.cacheTTL) {
+        localStorage.removeItem('dca_' + key);
+        return null;
+      }
+      return data;
+    } catch { return null; }
+  },
+
+  setCache(key, data) {
+    try {
+      // Keep only last 300 entries to manage storage
+      const trimmed = data.length > 300 ? data.slice(-300) : data;
+      localStorage.setItem('dca_' + key, JSON.stringify({
+        timestamp: Date.now(),
+        data: trimmed,
+      }));
+    } catch (e) {
+      console.warn('Cache write failed:', e.message);
+    }
+  },
+};
+
+// ============================================================
+// Module C: Indicator Calculation Engine
+// ============================================================
+const IndicatorEngine = {
+  calcSMA(closes, period) {
+    const result = [];
+    for (let i = 0; i < closes.length; i++) {
+      if (i < period - 1) { result.push(null); continue; }
+      let sum = 0;
+      for (let j = i - period + 1; j <= i; j++) sum += closes[j];
+      result.push(sum / period);
+    }
+    return result;
+  },
+
+  calcRSI(closes, period = 14) {
+    if (closes.length < period + 1) return new Array(closes.length).fill(null);
+    const result = new Array(closes.length).fill(null);
+    const deltas = [];
+    for (let i = 1; i < closes.length; i++) {
+      deltas.push(closes[i] - closes[i - 1]);
+    }
+    let avgGain = 0, avgLoss = 0;
+    for (let i = 0; i < period; i++) {
+      if (deltas[i] >= 0) avgGain += deltas[i];
+      else avgLoss += Math.abs(deltas[i]);
+    }
+    avgGain /= period;
+    avgLoss /= period;
+    result[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    for (let i = period; i < deltas.length; i++) {
+      const gain = deltas[i] >= 0 ? deltas[i] : 0;
+      const loss = deltas[i] < 0 ? Math.abs(deltas[i]) : 0;
+      avgGain = (avgGain * (period - 1) + gain) / period;
+      avgLoss = (avgLoss * (period - 1) + loss) / period;
+      result[i + 1] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    }
+    return result;
+  },
+
+  calcDrawdown(closes) {
+    const lookback = Math.min(252, closes.length);
+    const recent = closes.slice(-lookback);
+    const high = Math.max(...recent);
+    const current = closes[closes.length - 1];
+    return { high, current, drawdown: ((high - current) / high) * 100 };
+  },
+};
+
+// ============================================================
+// Module D: Scoring Engine
+// ============================================================
+const ScoringEngine = {
+  ma200Score(price, ma200) {
+    const pct = ((price - ma200) / ma200) * 100;
+    if (pct > 10) return 20;
+    if (pct > 0) return 20 + (10 - pct) * 2; // 20 -> 40
+    if (pct > -10) return 70 + pct * 3; // 70 -> 40 (pct is negative)
+    return 90;
+  },
+
+  rsiScore(rsi) {
+    if (rsi > 70) return Math.max(5, 20 - (rsi - 70) * 0.5);
+    if (rsi > 50) return 50 - (rsi - 50) * 1.5;
+    if (rsi > 30) return 80 - (rsi - 30) * 1.5;
+    return Math.min(100, 90 + (30 - rsi) * 0.33);
+  },
+
+  vixScore(vix) {
+    if (vix > 35) return 95;
+    if (vix > 25) return 60 + (vix - 25) * 2; // 60 -> 80
+    if (vix > 20) return 40 + (vix - 20) * 4; // 40 -> 60
+    if (vix > 15) return 20 + (vix - 15) * 4; // 20 -> 40
+    return 20;
+  },
+
+  drawdownScore(dd) {
+    if (dd > 20) return 90;
+    if (dd > 10) return 70 + (dd - 10) * 2; // 70 -> 90
+    if (dd > 3) return 45 + (dd - 3) * (25 / 7); // 45 -> 70
+    return 20 + dd * (25 / 3); // 20 -> 45
+  },
+
+  composite(scores) {
+    const w = CONFIG.weights;
+    let total = 0, totalWeight = 0;
+    if (scores.ma200 != null) { total += scores.ma200 * w.ma200; totalWeight += w.ma200; }
+    if (scores.rsi != null) { total += scores.rsi * w.rsi; totalWeight += w.rsi; }
+    if (scores.vix != null) { total += scores.vix * w.vix; totalWeight += w.vix; }
+    if (scores.drawdown != null) { total += scores.drawdown * w.drawdown; totalWeight += w.drawdown; }
+    return totalWeight > 0 ? Math.round(total / totalWeight) : 50;
+  },
+
+  recommend(score) {
+    if (score >= 70) return { text: '适合定投', color: 'var(--green)', bg: 'rgba(34,197,94,0.15)' };
+    if (score >= 40) return { text: '可以定投', color: 'var(--yellow)', bg: 'rgba(234,179,8,0.15)' };
+    return { text: '建议观望', color: 'var(--red)', bg: 'rgba(239,68,68,0.15)' };
+  },
+};
+
+// ============================================================
+// Module E: Chart Renderer
+// ============================================================
+const ChartRenderer = {
+  instance: null,
+
+  render(canvasId, priceData, ma200Values) {
+    if (this.instance) { this.instance.destroy(); this.instance = null; }
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+
+    // Prepare data - use last 252 trading days for chart
+    const chartData = priceData.slice(-252);
+    const chartMa200 = ma200Values.slice(-252);
+
+    const pricePoints = chartData.map((d, i) => ({ x: new Date(d.date), y: d.close }));
+    const maPoints = chartData.map((d, i) => {
+      if (chartMa200[i] == null) return null;
+      return { x: new Date(d.date), y: chartMa200[i] };
+    }).filter(Boolean);
+
+    this.instance = new Chart(canvas, {
+      type: 'line',
+      data: {
+        datasets: [
+          {
+            label: '收盘价',
+            data: pricePoints,
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59,130,246,0.08)',
+            borderWidth: 1.5,
+            pointRadius: 0,
+            fill: true,
+            tension: 0.1,
+          },
+          {
+            label: '200日均线',
+            data: maPoints,
+            borderColor: '#f59e0b',
+            borderWidth: 1.5,
+            borderDash: [6, 3],
+            pointRadius: 0,
+            fill: false,
+            tension: 0.1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        aspectRatio: 2.2,
+        interaction: { intersect: false, mode: 'index' },
+        plugins: {
+          legend: { labels: { color: '#8b8fa3', font: { size: 12 } } },
+          tooltip: {
+            backgroundColor: '#1a1d2e',
+            titleColor: '#e1e4ed',
+            bodyColor: '#e1e4ed',
+            borderColor: '#2a2e42',
+            borderWidth: 1,
+          },
+        },
+        scales: {
+          x: {
+            type: 'time',
+            time: { unit: 'month', tooltipFormat: 'yyyy-MM-dd' },
+            grid: { color: 'rgba(42,46,66,0.5)' },
+            ticks: { color: '#8b8fa3', maxTicksLimit: 10 },
+          },
+          y: {
+            grid: { color: 'rgba(42,46,66,0.5)' },
+            ticks: { color: '#8b8fa3' },
+          },
+        },
+      },
+    });
+  },
+};
+
+// ============================================================
+// Module F: UI Controller
+// ============================================================
+const App = {
+  settings: { apiKey: '', dataSource: 'yahoo' },
+
+  init() {
+    // Load settings
+    try {
+      const saved = JSON.parse(localStorage.getItem('dca_settings') || '{}');
+      if (saved.apiKey) this.settings.apiKey = saved.apiKey;
+      if (saved.dataSource) this.settings.dataSource = saved.dataSource;
+    } catch {}
+    document.getElementById('apiKeyInput').value = this.settings.apiKey;
+    document.getElementById('dataSourceSelect').value = this.settings.dataSource;
+
+    // Render presets
+    const presetsEl = document.getElementById('presets');
+    CONFIG.presets.forEach(t => {
+      const btn = document.createElement('button');
+      btn.className = 'preset-btn';
+      btn.textContent = t;
+      btn.onclick = () => {
+        document.getElementById('tickerInput').value = t;
+        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.analyze();
+      };
+      presetsEl.appendChild(btn);
+    });
+  },
+
+  toggleSettings() {
+    document.getElementById('settingsPanel').classList.toggle('open');
+  },
+
+  saveSettings() {
+    this.settings.apiKey = document.getElementById('apiKeyInput').value.trim();
+    this.settings.dataSource = document.getElementById('dataSourceSelect').value;
+    localStorage.setItem('dca_settings', JSON.stringify(this.settings));
+    this.showSuccess('设置已保存');
+  },
+
+  showLoading(show) {
+    document.getElementById('loading').classList.toggle('show', show);
+    document.getElementById('analyzeBtn').disabled = show;
+  },
+
+  showError(msg) {
+    const el = document.getElementById('errorMsg');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 8000);
+  },
+
+  showSuccess(msg) {
+    const el = document.getElementById('errorMsg');
+    el.textContent = msg;
+    el.style.background = 'rgba(34,197,94,0.1)';
+    el.style.borderColor = '#22c55e';
+    el.style.color = '#22c55e';
+    el.classList.add('show');
+    setTimeout(() => {
+      el.classList.remove('show');
+      el.style.background = '';
+      el.style.borderColor = '';
+      el.style.color = '';
+    }, 3000);
+  },
+
+  scoreColor(score) {
+    if (score >= 70) return 'var(--green)';
+    if (score >= 40) return 'var(--yellow)';
+    return 'var(--red)';
+  },
+
+  async analyze() {
+    const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
+    if (!ticker) { this.showError('请输入股票代码'); return; }
+
+    // Update active preset
+    document.querySelectorAll('.preset-btn').forEach(b => {
+      b.classList.toggle('active', b.textContent === ticker);
+    });
+
+    this.showLoading(true);
+    document.getElementById('errorMsg').classList.remove('show');
+    document.getElementById('dashboard').classList.remove('show');
+
+    try {
+      const source = this.settings.dataSource;
+      const cacheKey = `${ticker}_${source}`;
+
+      // Fetch price data
+      let priceData = DataService.getCache(cacheKey);
+      if (!priceData) {
+        if (source === 'yahoo') {
+          priceData = await DataService.fetchYahoo(ticker);
+        } else if (source === 'alphavantage') {
+          if (!this.settings.apiKey) throw new Error('请先在设置中输入 Alpha Vantage API Key');
+          priceData = await DataService.fetchAlphaVantage(this.settings.apiKey, ticker);
+        } else {
+          priceData = await DataService.fetchStooq(ticker);
+        }
+        if (!priceData || priceData.length < 30) {
+          throw new Error(`获取 ${ticker} 数据不足，请检查代码是否正确`);
+        }
+        DataService.setCache(cacheKey, priceData);
+      }
+
+      // Fetch VIX data
+      let vixData = DataService.getCache('VIX_' + source);
+      if (!vixData) {
+        try {
+          if (source === 'yahoo') {
+            vixData = await DataService.fetchYahooVIX();
+          } else if (source === 'alphavantage' && this.settings.apiKey) {
+            vixData = await DataService.fetchAVVIX(this.settings.apiKey);
+          } else {
+            vixData = await DataService.fetchStooqVIX();
+          }
+          if (vixData && vixData.length > 0) {
+            DataService.setCache('VIX_' + source, vixData);
+          }
+        } catch (e) {
+          console.warn('VIX fetch failed:', e.message);
+        }
+      }
+
+      // Calculate indicators
+      const closes = priceData.map(d => d.close);
+      const currentPrice = closes[closes.length - 1];
+      const latestDate = priceData[priceData.length - 1].date;
+
+      // 200MA
+      const ma200Values = IndicatorEngine.calcSMA(closes, 200);
+      const currentMA200 = ma200Values[ma200Values.length - 1];
+      const ma200Ready = currentMA200 != null;
+
+      // RSI
+      const rsiValues = IndicatorEngine.calcRSI(closes, 14);
+      const currentRSI = rsiValues[rsiValues.length - 1];
+      const rsiReady = currentRSI != null;
+
+      // Drawdown
+      const { high: high52w, drawdown } = IndicatorEngine.calcDrawdown(closes);
+
+      // VIX
+      const currentVIX = vixData && vixData.length > 0 ? vixData[vixData.length - 1].close : null;
+
+      // Scores
+      const scores = {
+        ma200: ma200Ready ? ScoringEngine.ma200Score(currentPrice, currentMA200) : null,
+        rsi: rsiReady ? ScoringEngine.rsiScore(currentRSI) : null,
+        vix: currentVIX != null ? ScoringEngine.vixScore(currentVIX) : null,
+        drawdown: ScoringEngine.drawdownScore(drawdown),
+      };
+      const composite = ScoringEngine.composite(scores);
+      const rec = ScoringEngine.recommend(composite);
+
+      // Render
+      this.renderDashboard({
+        ticker, currentPrice, latestDate,
+        ma200: { value: currentMA200, ready: ma200Ready, score: scores.ma200, price: currentPrice },
+        rsi: { value: currentRSI, ready: rsiReady, score: scores.rsi },
+        vix: { value: currentVIX, score: scores.vix },
+        drawdown: { value: drawdown, high: high52w, score: scores.drawdown },
+        composite, rec,
+      });
+
+      ChartRenderer.render('priceChart', priceData, ma200Values);
+
+    } catch (e) {
+      this.showError(e.message);
+    } finally {
+      this.showLoading(false);
+    }
+  },
+
+  renderDashboard(r) {
+    const dashboard = document.getElementById('dashboard');
+    dashboard.classList.add('show');
+
+    // Price summary
+    document.getElementById('tickerName').textContent = r.ticker;
+    document.getElementById('currentPrice').textContent = '$' + r.currentPrice.toFixed(2);
+    document.getElementById('dataDate').textContent = '数据日期: ' + r.latestDate;
+
+    // 200MA card
+    this.renderIndicatorCard({
+      cardId: 'cardMa200',
+      valueId: 'ma200Value', statusId: 'ma200Status', explainId: 'ma200Explain', barId: 'ma200Bar',
+      value: r.ma200.ready ? (((r.currentPrice - r.ma200.value) / r.ma200.value) * 100).toFixed(1) + '%' : '--',
+      score: r.ma200.score,
+      status: r.ma200.ready ? (r.currentPrice >= r.ma200.value ? '高于均线' : '低于均线') : '数据不足',
+      explanation: r.ma200.ready
+        ? `当前价格 $${r.currentPrice.toFixed(2)}，200日均线 $${r.ma200.value.toFixed(2)}，${r.currentPrice >= r.ma200.value ? '价格偏高' : '价格偏低，有利于成本摊薄'}`
+        : '历史数据不足 200 天，无法计算',
+    });
+
+    // RSI card
+    this.renderIndicatorCard({
+      cardId: 'cardRsi',
+      valueId: 'rsiValue', statusId: 'rsiStatus', explainId: 'rsiExplain', barId: 'rsiBar',
+      value: r.rsi.ready ? r.rsi.value.toFixed(1) : '--',
+      score: r.rsi.score,
+      status: r.rsi.ready ? (r.rsi.value < 30 ? '超卖' : r.rsi.value > 70 ? '超买' : '中性') : '数据不足',
+      explanation: r.rsi.ready
+        ? r.rsi.value < 30 ? 'RSI 处于超卖区域，近期卖压较大，可能是较好的定投时机'
+          : r.rsi.value > 70 ? 'RSI 处于超买区域，短期涨幅较大，建议观望'
+          : 'RSI 处于中性区域，无明显信号'
+        : '历史数据不足，无法计算 RSI',
+    });
+
+    // VIX card
+    this.renderIndicatorCard({
+      cardId: 'cardVix',
+      valueId: 'vixValue', statusId: 'vixStatus', explainId: 'vixExplain', barId: 'vixBar',
+      value: r.vix.value != null ? r.vix.value.toFixed(1) : '--',
+      score: r.vix.score,
+      status: r.vix.value != null
+        ? r.vix.value > 25 ? '恐慌' : r.vix.value > 20 ? '偏高' : '平稳'
+        : '数据暂不可用',
+      explanation: r.vix.value != null
+        ? r.vix.value > 25 ? `VIX 为 ${r.vix.value.toFixed(1)}，市场恐慌情绪较高，历史上恐慌时期定投往往有较好回报`
+          : r.vix.value > 20 ? `VIX 为 ${r.vix.value.toFixed(1)}，市场情绪偏谨慎`
+          : `VIX 为 ${r.vix.value.toFixed(1)}，市场情绪平稳，无明显恐慌信号`
+        : '无法获取 VIX 数据',
+    });
+
+    // Drawdown card
+    this.renderIndicatorCard({
+      cardId: 'cardDrawdown',
+      valueId: 'drawdownValue', statusId: 'drawdownStatus', explainId: 'drawdownExplain', barId: 'drawdownBar',
+      value: r.drawdown.value.toFixed(1) + '%',
+      score: r.drawdown.score,
+      status: r.drawdown.value > 20 ? '大幅回调' : r.drawdown.value > 10 ? '明显回调' : r.drawdown.value > 3 ? '小幅回调' : '接近高点',
+      explanation: r.drawdown.value > 10
+        ? `距离52周高点 $${r.drawdown.high.toFixed(2)} 回撤 ${r.drawdown.value.toFixed(1)}%，定投成本相对较低`
+        : `距离52周高点 $${r.drawdown.high.toFixed(2)} 仅回撤 ${r.drawdown.value.toFixed(1)}%，当前价格偏高`,
+    });
+
+    // Composite score
+    document.getElementById('scoreNumber').textContent = r.composite + ' / 100';
+    document.getElementById('scoreNumber').style.color = this.scoreColor(r.composite);
+    document.getElementById('scoreGauge').style.width = r.composite + '%';
+    document.getElementById('scoreGauge').style.background = this.scoreColor(r.composite);
+    const recEl = document.getElementById('recommendation');
+    recEl.textContent = r.rec.text;
+    recEl.style.color = r.rec.color;
+    recEl.style.background = r.rec.bg;
+
+    // Summary
+    let summary = `综合评分 ${r.composite}/100，`;
+    if (r.composite >= 70) {
+      summary += '多项指标显示当前市场处于较为有利的定投窗口，建议按计划执行定投。';
+    } else if (r.composite >= 40) {
+      summary += '市场信号中性，可以按计划定投但建议适当关注市场变化。';
+    } else {
+      summary += '市场整体偏贵或情绪过于乐观，建议观望或减少定投金额。';
+    }
+    document.getElementById('summary').textContent = summary;
+  },
+
+  renderIndicatorCard({ cardId, valueId, statusId, explainId, barId, value, score, status, explanation }) {
+    document.getElementById(valueId).textContent = value;
+    document.getElementById(statusId).textContent = status;
+    document.getElementById(statusId).style.color = score != null ? this.scoreColor(score) : 'var(--text-dim)';
+    document.getElementById(explainId).textContent = explanation;
+    const bar = document.getElementById(barId);
+    bar.style.width = (score || 0) + '%';
+    bar.style.background = score != null ? this.scoreColor(score) : 'var(--border)';
+  },
+};
+
+// Init on load
+document.addEventListener('DOMContentLoaded', () => App.init());
+</script>
+</body>
+</html>
