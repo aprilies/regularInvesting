@@ -8,7 +8,8 @@ const assert = require('assert');
 // Extract modules from index.html
 // ----------------------------------------------------------
 const CONFIG = {
-  presets: ['SPY', 'QQQ', 'VOO', 'VTI', 'DIA', 'IVV'],
+  presets: ['SPY', 'QQQ', 'VOO', 'VTI', 'DIA', 'IVV', '510300', '510500', '159915'],
+  presetsCN: ['sh000001', 'sz399001', 'sh510300', 'sz159915', 'sh518880', 'sz159920'],
   proxies: [
     url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
     url => 'https://corsproxy.io/?' + encodeURIComponent(url),

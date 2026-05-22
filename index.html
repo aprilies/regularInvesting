@@ -500,20 +500,62 @@ const DataService = {
     return 'us';
   },
 
-  // Convert Chinese ticker to Yahoo Finance format
-  toYahooTicker(ticker) {
+  // Convert Chinese ticker to Tencent format
+  toTencentTicker(ticker) {
     const t = ticker.toLowerCase();
-    // Already in Yahoo format
-    if (t.endsWith('.ss') || t.endsWith('.sz') || t.endsWith('.hk')) return ticker.toUpperCase();
-    // sh/sz prefix to Yahoo suffix
-    if (t.startsWith('sh')) return ticker.toUpperCase() + '.SS';
-    if (t.startsWith('sz')) return ticker.toUpperCase() + '.SZ';
-    // Pure 6-digit number
+    if (t.startsWith('sh') || t.startsWith('sz')) return t;
     if (/^\d{6}$/.test(t)) {
-      const num = parseInt(t);
-      return num < 100000 ? ticker + '.SZ' : ticker + '.SS';
+      return parseInt(t) < 100000 ? 'sz' + t : 'sh' + t;
     }
-    return ticker;
+    return t;
+  },
+
+  // Tencent Finance API for Chinese markets (A-shares)
+  // Uses direct fetch since Tencent supports CORS
+  async fetchTencent(ticker) {
+    const tencentTick = this.toTencentTicker(ticker);
+    const url = `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?_var=kline_dayfqall&param=${tencentTick},day,,,800,qfq&r=${Date.now()}`;
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      const resp = await fetch(url, { signal: controller.signal });
+      clearTimeout(timer);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const text = await resp.text();
+      return this.parseTencent(text, tencentTick);
+    } catch (e) {
+      console.warn('Tencent direct fetch failed:', e.message);
+      // Fall back to proxy
+      const text = await this.fetchWithProxy(url);
+      return this.parseTencent(text, tencentTick);
+    }
+  },
+
+  parseTencent(text, ticker) {
+    try {
+      // Remove the JSONP wrapper: kline_dayfqall={...}
+      const jsonText = text.replace(/^[^=]+=/, '');
+      const json = JSON.parse(jsonText);
+      const data = json.data && json.data[ticker];
+      if (!data) return [];
+
+      // Format: qfqday (adjusted) or day (non-adjusted)
+      const candleKey = data.qfqday ? 'qfqday' : 'day';
+      const candles = data[candleKey];
+      if (!Array.isArray(candles)) return [];
+
+      return candles.map(c => ({
+        date: c[0],
+        open: parseFloat(c[1]) || 0,
+        close: parseFloat(c[2]) || 0,
+        high: parseFloat(c[3]) || 0,
+        low: parseFloat(c[4]) || 0,
+        volume: parseFloat(c[5]) || 0,
+      })).filter(d => d.close > 0 && d.date).sort((a, b) => a.date.localeCompare(b.date));
+    } catch (e) {
+      console.warn('Tencent parse error:', e.message);
+      return [];
+    }
   },
 
   // Cache
@@ -824,9 +866,8 @@ const App = {
       let priceData = DataService.getCache(cacheKey);
       if (!priceData) {
         if (market === 'cn') {
-          // Chinese A-share market via Yahoo Finance
-          const yahooTicker = DataService.toYahooTicker(ticker);
-          priceData = await DataService.fetchYahoo(yahooTicker);
+          // Chinese A-share market via Tencent Finance
+          priceData = await DataService.fetchTencent(ticker);
         } else if (source === 'yahoo') {
           priceData = await DataService.fetchYahoo(ticker);
         } else if (source === 'alphavantage') {
