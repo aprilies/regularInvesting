@@ -291,7 +291,8 @@ footer {
 // Module A: Constants & Configuration
 // ============================================================
 const CONFIG = {
-  presets: ['SPY', 'QQQ', 'VOO', 'VTI', 'DIA', 'IVV'],
+  presets: ['SPY', 'QQQ', 'VOO', 'VTI', 'DIA', 'IVV', '510300', '510500', '159915'],
+  presetsCN: ['sh000001', 'sz399001', 'sh510300', 'sz159915', 'sh518880', 'sz159920'],
   proxies: [
     url => '/api/proxy?url=' + encodeURIComponent(url),
     url => 'http://localhost:8787/?url=' + encodeURIComponent(url),
@@ -436,6 +437,83 @@ const DataService = {
 
   async fetchAVVIX(apiKey) {
     return this.fetchAlphaVantage(apiKey, 'VIX');
+  },
+
+  // Sina Finance API for Chinese markets
+  // Supports: sh600000 (SSE), sz000001 (SZSE), sz399001 (SZ Component), sh510300 (ETF)
+  parseSinaJSON(text) {
+    const match = text.match(/=(\[{.*}\])/);
+    if (!match) return [];
+    try {
+      const data = JSON.parse(match[1]);
+      return data.map(item => ({
+        date: item.day,
+        open: parseFloat(item.open) || 0,
+        high: parseFloat(item.high) || 0,
+        low: parseFloat(item.low) || 0,
+        close: parseFloat(item.close) || 0,
+        volume: parseInt(item.volume) || 0,
+      })).filter(d => d.close > 0).sort((a, b) => a.date.localeCompare(b.date));
+    } catch {
+      return [];
+    }
+  },
+
+  async fetchSina(ticker) {
+    // Sina uses prefixes: sh=Shanghai, sz=Shenzhen, HK=HK stock
+    let sinatick = ticker.toLowerCase();
+    if (/^\d{6}$/.test(ticker)) {
+      // Pure number, guess market based on range
+      const num = parseInt(ticker);
+      sinatick = num < 100000 ? 'sz' + ticker : 'sh' + ticker;
+    }
+    const url = `https://finance.yahoo.com/v7/finance/download/${sinatick}?interval=1d&events=history`;
+    // Actually use Sina's stock API
+    const sinaUrl = `https://hq.sinajs.cn/list=${sinatick}`;
+    return this.fetchWithProxy(sinaUrl).then(text => this.parseSinaCSV(text, sinatick));
+  },
+
+  parseSinaCSV(text, sinatick) {
+    // Sina CSV format: date,open,high,low,close,volume
+    const lines = text.trim().split('\n').filter(l => l.trim());
+    if (lines.length < 2) return [];
+    return lines.slice(1).map(line => {
+      const cols = line.split(',');
+      if (cols.length < 6) return null;
+      return {
+        date: cols[0],
+        open: parseFloat(cols[1]),
+        high: parseFloat(cols[2]),
+        low: parseFloat(cols[3]),
+        close: parseFloat(cols[4]),
+        volume: parseInt(cols[5]) || 0,
+      };
+    }).filter(d => d && !isNaN(d.close)).sort((a, b) => a.date.localeCompare(b.date));
+  },
+
+  detectMarket(ticker) {
+    const t = ticker.toLowerCase();
+    if (t.startsWith('sh') || t.startsWith('sz')) return 'cn';
+    if (t.startsWith('hk')) return 'hk';
+    if (/^\d{6}$/.test(t)) return 'cn';
+    if (/^\d+$/.test(t) && ticker.length <= 6) return 'cn';
+    return 'us';
+  },
+
+  // Convert Chinese ticker to Yahoo Finance format
+  toYahooTicker(ticker) {
+    const t = ticker.toLowerCase();
+    // Already in Yahoo format
+    if (t.endsWith('.ss') || t.endsWith('.sz') || t.endsWith('.hk')) return ticker.toUpperCase();
+    // sh/sz prefix to Yahoo suffix
+    if (t.startsWith('sh')) return ticker.toUpperCase() + '.SS';
+    if (t.startsWith('sz')) return ticker.toUpperCase() + '.SZ';
+    // Pure 6-digit number
+    if (/^\d{6}$/.test(t)) {
+      const num = parseInt(t);
+      return num < 100000 ? ticker + '.SZ' : ticker + '.SS';
+    }
+    return ticker;
   },
 
   // Cache
@@ -663,7 +741,8 @@ const App = {
 
     // Render presets
     const presetsEl = document.getElementById('presets');
-    CONFIG.presets.forEach(t => {
+    const allPresets = [...CONFIG.presets, ...CONFIG.presetsCN];
+    allPresets.forEach(t => {
       const btn = document.createElement('button');
       btn.className = 'preset-btn';
       btn.textContent = t;
@@ -725,6 +804,9 @@ const App = {
     const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
     if (!ticker) { this.showError('请输入股票代码'); return; }
 
+    // Detect market type
+    const market = DataService.detectMarket(ticker);
+
     // Update active preset
     document.querySelectorAll('.preset-btn').forEach(b => {
       b.classList.toggle('active', b.textContent === ticker);
@@ -738,10 +820,14 @@ const App = {
       const source = this.settings.dataSource;
       const cacheKey = `${ticker}_${source}`;
 
-      // Fetch price data
+      // Fetch price data based on market
       let priceData = DataService.getCache(cacheKey);
       if (!priceData) {
-        if (source === 'yahoo') {
+        if (market === 'cn') {
+          // Chinese A-share market via Yahoo Finance
+          const yahooTicker = DataService.toYahooTicker(ticker);
+          priceData = await DataService.fetchYahoo(yahooTicker);
+        } else if (source === 'yahoo') {
           priceData = await DataService.fetchYahoo(ticker);
         } else if (source === 'alphavantage') {
           if (!this.settings.apiKey) throw new Error('请先在设置中输入 Alpha Vantage API Key');
@@ -755,22 +841,25 @@ const App = {
         DataService.setCache(cacheKey, priceData);
       }
 
-      // Fetch VIX data
-      let vixData = DataService.getCache('VIX_' + source);
-      if (!vixData) {
-        try {
-          if (source === 'yahoo') {
-            vixData = await DataService.fetchYahooVIX();
-          } else if (source === 'alphavantage' && this.settings.apiKey) {
-            vixData = await DataService.fetchAVVIX(this.settings.apiKey);
-          } else {
-            vixData = await DataService.fetchStooqVIX();
+      // Fetch VIX only for US markets
+      let vixData = null;
+      if (market === 'us') {
+        vixData = DataService.getCache('VIX_' + source);
+        if (!vixData) {
+          try {
+            if (source === 'yahoo') {
+              vixData = await DataService.fetchYahooVIX();
+            } else if (source === 'alphavantage' && this.settings.apiKey) {
+              vixData = await DataService.fetchAVVIX(this.settings.apiKey);
+            } else {
+              vixData = await DataService.fetchStooqVIX();
+            }
+            if (vixData && vixData.length > 0) {
+              DataService.setCache('VIX_' + source, vixData);
+            }
+          } catch (e) {
+            console.warn('VIX fetch failed:', e.message);
           }
-          if (vixData && vixData.length > 0) {
-            DataService.setCache('VIX_' + source, vixData);
-          }
-        } catch (e) {
-          console.warn('VIX fetch failed:', e.message);
         }
       }
 
@@ -795,19 +884,23 @@ const App = {
       // VIX
       const currentVIX = vixData && vixData.length > 0 ? vixData[vixData.length - 1].close : null;
 
-      // Scores
+      // Scores - VIX only for US markets
       const scores = {
         ma200: ma200Ready ? ScoringEngine.ma200Score(currentPrice, currentMA200) : null,
         rsi: rsiReady ? ScoringEngine.rsiScore(currentRSI) : null,
         vix: currentVIX != null ? ScoringEngine.vixScore(currentVIX) : null,
         drawdown: ScoringEngine.drawdownScore(drawdown),
       };
+      // For non-US markets, VIX is not applicable
+      if (market !== 'us') {
+        delete scores.vix;
+      }
       const composite = ScoringEngine.composite(scores);
       const rec = ScoringEngine.recommend(composite);
 
       // Render
       this.renderDashboard({
-        ticker, currentPrice, latestDate,
+        ticker, currentPrice, latestDate, market,
         ma200: { value: currentMA200, ready: ma200Ready, score: scores.ma200, price: currentPrice },
         rsi: { value: currentRSI, ready: rsiReady, score: scores.rsi },
         vix: { value: currentVIX, score: scores.vix },
@@ -828,9 +921,12 @@ const App = {
     const dashboard = document.getElementById('dashboard');
     dashboard.classList.add('show');
 
+    // Currency symbol based on market
+    const currencySymbol = r.market === 'cn' ? '¥' : r.market === 'hk' ? 'HK$' : '$';
+
     // Price summary
     document.getElementById('tickerName').textContent = r.ticker;
-    document.getElementById('currentPrice').textContent = '$' + r.currentPrice.toFixed(2);
+    document.getElementById('currentPrice').textContent = currencySymbol + r.currentPrice.toFixed(2);
     document.getElementById('dataDate').textContent = '数据日期: ' + r.latestDate;
 
     // 200MA card
@@ -841,7 +937,7 @@ const App = {
       score: r.ma200.score,
       status: r.ma200.ready ? (r.currentPrice >= r.ma200.value ? '高于均线' : '低于均线') : '数据不足',
       explanation: r.ma200.ready
-        ? `当前价格 $${r.currentPrice.toFixed(2)}，200日均线 $${r.ma200.value.toFixed(2)}，${r.currentPrice >= r.ma200.value ? '价格偏高' : '价格偏低，有利于成本摊薄'}`
+        ? `当前价格 ${currencySymbol}${r.currentPrice.toFixed(2)}，200日均线 ${currencySymbol}${r.ma200.value.toFixed(2)}，${r.currentPrice >= r.ma200.value ? '价格偏高' : '价格偏低，有利于成本摊薄'}`
         : '历史数据不足 200 天，无法计算',
     });
 
@@ -883,8 +979,8 @@ const App = {
       score: r.drawdown.score,
       status: r.drawdown.value > 20 ? '大幅回调' : r.drawdown.value > 10 ? '明显回调' : r.drawdown.value > 3 ? '小幅回调' : '接近高点',
       explanation: r.drawdown.value > 10
-        ? `距离52周高点 $${r.drawdown.high.toFixed(2)} 回撤 ${r.drawdown.value.toFixed(1)}%，买入成本相对较低`
-        : `距离52周高点 $${r.drawdown.high.toFixed(2)} 仅回撤 ${r.drawdown.value.toFixed(1)}%，当前价格偏高`,
+        ? `距离52周高点 ${currencySymbol}${r.drawdown.high.toFixed(2)} 回撤 ${r.drawdown.value.toFixed(1)}%，买入成本相对较低`
+        : `距离52周高点 ${currencySymbol}${r.drawdown.high.toFixed(2)} 仅回撤 ${r.drawdown.value.toFixed(1)}%，当前价格偏高`,
     });
 
     // Composite score
