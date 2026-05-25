@@ -976,8 +976,9 @@ const App = {
 
     // Price summary
     let displayName = r.ticker;
-    if (r.market === 'cn' && CONFIG.tickerNamesCN[r.ticker]) {
-      displayName = CONFIG.tickerNamesCN[r.ticker] + '（' + r.ticker + '）';
+    const tickerLower = r.ticker.toLowerCase();
+    if (r.market === 'cn' && CONFIG.tickerNamesCN[tickerLower]) {
+      displayName = CONFIG.tickerNamesCN[tickerLower] + '（' + r.ticker + '）';
     }
     document.getElementById('tickerName').textContent = displayName;
     document.getElementById('currentPrice').textContent = currencySymbol + r.currentPrice.toFixed(2);
