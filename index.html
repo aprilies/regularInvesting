@@ -293,6 +293,15 @@ footer {
 const CONFIG = {
   presets: ['SPY', 'QQQ', 'VOO', 'VTI', 'DIA', 'IVV', '510300', '510500', '159915'],
   presetsCN: ['sh000001', 'sz399001', 'sh510300', 'sz159915', 'sh518880', 'sz159920'],
+  // Chinese market ticker display names: ticker -> display name
+  tickerNamesCN: {
+    'sh000001': '上证指数',
+    'sz399001': '深证成指',
+    'sh510300': '沪深300',
+    'sz159915': '创业板指',
+    'sh518880': '黄金ETF',
+    'sz159920': '恒生ETF',
+  },
   proxies: [
     url => '/api/proxy?url=' + encodeURIComponent(url),
     url => 'http://localhost:8787/?url=' + encodeURIComponent(url),
@@ -966,7 +975,11 @@ const App = {
     const currencySymbol = r.market === 'cn' ? '¥' : r.market === 'hk' ? 'HK$' : '$';
 
     // Price summary
-    document.getElementById('tickerName').textContent = r.ticker;
+    let displayName = r.ticker;
+    if (r.market === 'cn' && CONFIG.tickerNamesCN[r.ticker]) {
+      displayName = CONFIG.tickerNamesCN[r.ticker] + '（' + r.ticker + '）';
+    }
+    document.getElementById('tickerName').textContent = displayName;
     document.getElementById('currentPrice').textContent = currencySymbol + r.currentPrice.toFixed(2);
     document.getElementById('dataDate').textContent = '数据日期: ' + r.latestDate;
 
