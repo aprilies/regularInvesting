@@ -151,6 +151,36 @@ header p { color: var(--text-dim); margin-top: 0.3rem; font-size: 0.95rem; }
 }
 .score-gauge-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
 
+/* Score History */
+.history-container {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1rem; margin-bottom: 1rem;
+}
+.history-container .history-title {
+  color: var(--text-dim); font-size: 0.85rem; margin-bottom: 0.6rem;
+}
+.history-list {
+  display: flex; gap: 0.5rem; overflow-x: auto; padding-bottom: 0.3rem;
+}
+.history-item {
+  flex-shrink: 0; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 0.5rem 0.8rem; min-width: 100px; text-align: center;
+}
+.history-item .hi-ticker { font-size: 0.75rem; color: var(--text-dim); }
+.history-item .hi-score { font-size: 1.2rem; font-weight: 700; }
+.history-item .hi-date { font-size: 0.7rem; color: var(--text-dim); }
+.history-item .hi-rec { font-size: 0.7rem; margin-top: 0.2rem; }
+
+/* Weight Sliders */
+.weight-row { display: flex; gap: 0.8rem; align-items: center; margin-bottom: 0.4rem; }
+.weight-row label { color: var(--text-dim); font-size: 0.85rem; min-width: 80px; }
+.weight-row input[type="range"] {
+  flex: 1; accent-color: var(--accent); height: 4px;
+}
+.weight-row .weight-val {
+  color: var(--text); font-size: 0.85rem; min-width: 36px; text-align: right;
+}
+
 /* Chart */
 .chart-container {
   background: var(--card); border: 1px solid var(--border); border-radius: 10px;
@@ -182,7 +212,7 @@ footer {
 
 <header>
   <h1>买入决策助手</h1>
-  <p>基于 200 日均线、RSI、VIX 恐慌指数、回撤幅度综合判断买入时机</p>
+  <p>基于 200 日均线、RSI、MACD、回撤幅度综合判断买入时机（美股另含 VIX）</p>
 </header>
 
 <!-- Settings -->
@@ -202,8 +232,31 @@ footer {
       <option value="alphavantage">Alpha Vantage（需要 Key）</option>
     </select>
   </div>
-  <p class="settings-note">Yahoo Finance 数据全面，需先运行 <code style="background:var(--bg);padding:0.1rem 0.3rem;border-radius:3px;">node proxy.js</code> 启动本地代理。Alpha Vantage 免费 Key 每天 25 次请求。
+  <p class="settings-note">美股需运行 <code style="background:var(--bg);padding:0.1rem 0.3rem;border-radius:3px;">node proxy.js</code> 本地代理。中国A股/港股使用腾讯财经 API，无需代理。Alpha Vantage 免费 Key 每天 25 次请求。
     <a href="https://www.alphavantage.co/support/#api-key" target="_blank" style="color:var(--accent);">申请 Key</a></p>
+  <div style="margin-top:0.8rem;border-top:1px solid var(--border);padding-top:0.8rem;">
+    <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:0.5rem;">评分权重调整</p>
+    <div class="weight-row">
+      <label>200日均线:</label>
+      <input type="range" id="wMa200" min="0" max="50" value="30" oninput="document.getElementById('wMa200Val').textContent=this.value+'%'">
+      <span class="weight-val" id="wMa200Val">30%</span>
+    </div>
+    <div class="weight-row">
+      <label>RSI:</label>
+      <input type="range" id="wRsi" min="0" max="50" value="25" oninput="document.getElementById('wRsiVal').textContent=this.value+'%'">
+      <span class="weight-val" id="wRsiVal">25%</span>
+    </div>
+    <div class="weight-row">
+      <label>VIX:</label>
+      <input type="range" id="wVix" min="0" max="50" value="25" oninput="document.getElementById('wVixVal').textContent=this.value+'%'">
+      <span class="weight-val" id="wVixVal">25%</span>
+    </div>
+    <div class="weight-row">
+      <label>回撤:</label>
+      <input type="range" id="wDd" min="0" max="50" value="20" oninput="document.getElementById('wDdVal').textContent=this.value+'%'">
+      <span class="weight-val" id="wDdVal">20%</span>
+    </div>
+  </div>
   <div style="margin-top:0.5rem;">
     <button onclick="App.saveSettings()" style="background:var(--accent);border:none;color:#fff;padding:0.35rem 1rem;border-radius:6px;cursor:pointer;font-size:0.85rem;">保存设置</button>
   </div>
@@ -213,7 +266,7 @@ footer {
 <div class="ticker-section">
   <div class="presets" id="presets"></div>
   <div class="custom-input">
-    <input type="text" id="tickerInput" placeholder="输入股票代码，如 AAPL、BABA" onkeydown="if(event.key==='Enter')App.analyze()">
+    <input type="text" id="tickerInput" placeholder="输入股票代码，如 AAPL、sh510300、hk00700" onkeydown="if(event.key==='Enter')App.analyze()">
     <button class="analyze-btn" id="analyzeBtn" onclick="App.analyze()">分析</button>
   </div>
 </div>
@@ -250,7 +303,7 @@ footer {
       <div class="explanation" id="rsiExplain"></div>
       <div class="score-bar"><div class="score-bar-fill" id="rsiBar"></div></div>
     </div>
-    <div class="indicator-card" id="cardVix">
+    <div class="indicator-card" id="cardVix" data-market="us">
       <div class="label">VIX 恐慌指数</div>
       <div class="value" id="vixValue">--</div>
       <div class="status" id="vixStatus"></div>
